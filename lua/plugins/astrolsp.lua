@@ -1,9 +1,35 @@
-if true then return {} end -- WARN: REMOVE THIS LINE TO ACTIVATE THIS FILE
+-- if true then return {} end -- WARN: REMOVE THIS LINE TO ACTIVATE THIS FILE
 
 -- AstroLSP allows you to customize the features in AstroNvim's LSP configuration engine
 -- Configuration documentation can be found with `:h astrolsp`
 -- NOTE: We highly recommend setting up the Lua Language Server (`:LspInstall lua_ls`)
 --       as this provides autocomplete and documentation while editing
+local function add_ruby_deps_command(client, bufnr)
+  vim.api.nvim_buf_create_user_command(bufnr, "ShowRubyDeps", function(opts)
+    local params = vim.lsp.util.make_text_document_params()
+    local showAll = opts.args == "all"
+
+    client.request("rubyLsp/workspace/dependencies", params, function(error, result)
+      if error then
+        print("Error showing deps: " .. error)
+        return
+      end
+
+      local qf_list = {}
+      for _, item in ipairs(result) do
+        if showAll or item.dependency then
+          table.insert(qf_list, {
+            text = string.format("%s (%s) - %s", item.name, item.version, item.dependency),
+            filename = item.path,
+          })
+        end
+      end
+
+      vim.fn.setqflist(qf_list)
+      vim.cmd "copen"
+    end, bufnr)
+  end, { nargs = "?", complete = function() return { "all" } end })
+end
 
 ---@type LazySpec
 return {
@@ -15,12 +41,13 @@ return {
       codelens = true, -- enable/disable codelens refresh on start
       inlay_hints = false, -- enable/disable inlay hints on start
       semantic_tokens = true, -- enable/disable semantic token highlighting
+      signature_help = true,
     },
     -- customize lsp formatting options
     formatting = {
       -- control auto formatting on save
       format_on_save = {
-        enabled = true, -- enable or disable format on save globally
+        enabled = false, -- enable or disable format on save globally
         allow_filetypes = { -- enable format on save for specified filetypes only
           -- "go",
         },
@@ -39,12 +66,41 @@ return {
     },
     -- enable servers that you already have installed without mason
     servers = {
+      -- "ruby_lsp",
       -- "pyright"
     },
     -- customize language server configuration options passed to `lspconfig`
     ---@diagnostic disable: missing-fields
     config = {
       -- clangd = { capabilities = { offsetEncoding = "utf-8" } },
+      solargraph = {
+        autostart = false,
+        formatter = "standard",
+        linters = { "standard" },
+      },
+
+      ruby_lsp = {
+        autostart = true,
+        formatter = "standard",
+        linters = { "standard" },
+        -- enabledFeatures = {
+        --   codeActions = true,
+        --   diagnostics = true,
+        --   documentHighlights = true,
+        --   documentLink = true,
+        --   documentSymbols = true,
+        --   foldingRanges = true,
+        --   formatting = true,
+        --   hover = true,
+        --   inlayHint = true,
+        --   onTypeFormatting = true,
+        --   selectionRanges = true,
+        --   semanticHighlighting = true,
+        --   completion = true,
+        -- },
+
+        on_attach = function(client, bufnr) add_ruby_deps_command(client, bufnr) end,
+      },
     },
     -- customize how language servers are attached
     handlers = {
